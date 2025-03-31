@@ -2,7 +2,7 @@ import pygame
 import sys
 import math
 import random
-
+from collections import defaultdict
 
 class Agent:
     def __init__(self, x, y, type, cell_size):
@@ -21,10 +21,10 @@ class Agent:
         self.lookahead_distance = cell_size
         self.move_step = 2
         self.radius = self.cell_size // 4
-        self.vision_arc = []  # Format: [("wall", distance), ("empty", max_range), ("object", distance)]
+        self.vision_arc = defaultdict(list)  # Format: [("wall", distance), ("empty", max_range), ("object", distance)]
         self.fov = math.pi / 3  # Field of view (60 degrees)
         self.half_fov = self.fov / 2
-        self.casted_rays = 160  # Number of rays
+        self.casted_rays = 20  # Number of rays
         self.step_angle = self.fov / self.casted_rays
         self.max_depth = cell_size * 8  # Maximum vision range
 
@@ -59,8 +59,10 @@ class Agent:
         start_angle = math.radians(self.angle) - self.half_fov
         for ray in range(self.casted_rays):
             depth = self.max_depth
-            if ray < len(self.vision_arc):
-                depth = self.vision_arc[ray][1]
+            if self.vision_arc[str(ray+1)]:
+                depth = max(pair[1] for pair in self.vision_arc[str(ray+1)])
+            else:
+                depth = self.max_depth
             end_x = self.x + math.cos(start_angle) * depth
             end_y = self.y + math.sin(start_angle) * depth
             pygame.draw.line(screen, (0, 255, 0), (self.x, self.y), (end_x, end_y), 1)
@@ -146,7 +148,7 @@ class Agent:
         self.angle = (self.angle + 30) % 360
 
     def update_vision_arc(self, maze):
-        self.vision_arc = []
+        self.vision_arc = defaultdict(list)
         start_angle = math.radians(self.angle) - self.half_fov
 
         for ray in range(self.casted_rays):
@@ -160,13 +162,21 @@ class Agent:
                 if 0 <= row < len(maze) and 0 <= col < len(maze[0]):
                     cell = maze[row][col]
                     if cell == 'w':  # Wall
-                        self.vision_arc.append(("wall", depth))
+                        self.vision_arc[str(ray+1)].append(("wall", depth))
                         break
                     elif cell == 'd':  # Closed door
-                        self.vision_arc.append(("object", depth))
+                        self.vision_arc[str(ray+1)].append(("closed door", depth))
                         break
-                else:
-                    self.vision_arc.append(("empty", self.max_depth))
-                    break
+                    elif cell == 'o':  # Open door
+                        try:
+                            if self.vision_arc[str(ray+1)][-1][0] != "open door":
+                                self.vision_arc[str(ray+1)].append(("open door", depth))
+                        except IndexError:
+                            self.vision_arc[str(ray+1)].append(("open door", depth))
+                    elif depth == self.max_depth - 1:
+                        self.vision_arc[str(ray+1)].append(("empty", depth))
+                        break
 
             start_angle += self.step_angle
+        
+        print(self.vision_arc)

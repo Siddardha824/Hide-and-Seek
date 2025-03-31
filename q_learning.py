@@ -25,9 +25,10 @@ class QLearningAgent(Agent):
     def save_q_table(self):
         with open(self.qtable_path, "w") as f:
             for state, actions in self.q_table.items():
-                state_str = f"{state[0]},{state[1]},{state[2]}"  # x,y,angle
+                state_str = f"{state[0]},{state[1]},{state[2]}"  # x,y,angle,vision_arc
                 actions_str = ",".join(f"{a}:{q:.4f}" for a, q in actions.items())
                 f.write(f"{state_str}|{actions_str}\n")
+                #print(f"{state_str}|{actions_str}\n")
 
     def load_q_table(self):
         q_table = {}
@@ -47,8 +48,9 @@ class QLearningAgent(Agent):
                         actions[a] = float(q)
                 q_table[(x, y, angle)] = actions
         return q_table
-
+    
     def get_state(self):
+        #print(self.vision_arc)
         return (round(self.x), round(self.y), round(self.angle))
 
     def get_action(self):

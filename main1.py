@@ -19,7 +19,7 @@ with open(reward_log_path, "w") as f:
 
 def get_maze_file():
     # Check if a file name is passed via command-line
-    maze_file_name = sys.argv[1] if len(sys.argv) > 1 else "maze.txt"
+    maze_file_name = sys.argv[1] if len(sys.argv) > 1 else "maze3.txt"
 
     # Check if file exists
     if not os.path.exists(maze_file_name):
