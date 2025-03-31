@@ -42,6 +42,10 @@ class Maze:
                     pygame.draw.rect(screen, (100, 100, 100), (x * cell_size, y * cell_size, cell_size, cell_size))
                 elif cell == 'd':
                     pygame.draw.rect(screen, (255, 255, 0), (x * cell_size, y * cell_size, cell_size, cell_size))
+                elif cell >= '0' and cell <= '4':
+                    pygame.draw.circle(screen, (0, 0, 255), (x * cell_size, y * cell_size), (cell_size // 2)*(int(cell)+1) // 5)
+                elif cell >= '5' and cell <= '9':
+                    pygame.draw.circle(screen, (255, 0, 0), (x * cell_size, y * cell_size), (cell_size // 2)*(int(cell)-4) // 5)
 
     def get_free_position(self,maze):
         free_positions = [(x, y) for y in range(len(maze)) for x in range(len(maze[0])) if maze[y][x] != 'w']

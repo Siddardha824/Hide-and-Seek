@@ -27,6 +27,7 @@ class Agent:
         self.casted_rays = 20  # Number of rays
         self.step_angle = self.fov / self.casted_rays
         self.max_depth = cell_size * 8  # Maximum vision range
+        self.trail_arc = defaultdict(list)
 
     def will_collide_with(self, other_agent, dx, dy):
         next_x = self.x + dx
@@ -102,10 +103,16 @@ class Agent:
 
         # Apply movement and track distance
         prev_x, prev_y = self.x, self.y
+        col = int(prev_x / self.cell_size)
+        row = int(prev_y / self.cell_size)
+        if self.type == "seeker" and maze[row][col] != 'o':
+            maze[row][col] = '9'
+        elif self.type == "hider" and maze[row][col] != 'o':
+            maze[row][col] = '4'
         self.x += dx
         self.y += dy
         self.total_distance += math.hypot(self.x - prev_x, self.y - prev_y)
-        self.update_vision_arc(maze)  # Update vision arc after movement
+        self.update_vision_and_trail_arc(maze)  # Update vision arc after movement
 
     def open_door(self,maze):
         look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
@@ -147,8 +154,9 @@ class Agent:
     def rotate_right(self):
         self.angle = (self.angle + 30) % 360
 
-    def update_vision_arc(self, maze):
+    def update_vision_and_trail_arc(self, maze):
         self.vision_arc = defaultdict(list)
+        self.trail_arc = defaultdict(list)
         start_angle = math.radians(self.angle) - self.half_fov
 
         for ray in range(self.casted_rays):
@@ -167,6 +175,12 @@ class Agent:
                     elif cell == 'd':  # Closed door
                         self.vision_arc[str(ray+1)].append(("closed door", depth))
                         break
+                    elif cell == 's':  # Seeker
+                        self.vision_arc[str(ray+1)].append(("seeker", depth))
+                        break
+                    elif cell == 'h':
+                        self.vision_arc[str(ray+1)].append(("hider", depth))
+                        break
                     elif cell == 'o':  # Open door
                         try:
                             if self.vision_arc[str(ray+1)][-1][0] != "open door":
@@ -176,7 +190,9 @@ class Agent:
                     elif depth == self.max_depth - 1:
                         self.vision_arc[str(ray+1)].append(("empty", depth))
                         break
-
+                    if cell >= '0' and cell <= '4' and self.type == 'seeker':
+                        self.trail_arc[str(ray+1)].append((cell, depth))
+                    if cell >= '5' and cell <= '9' and self.type == 'hider':
+                        self.trail_arc[str(ray+1)].append((cell, depth))
             start_angle += self.step_angle
         
-        print(self.vision_arc)

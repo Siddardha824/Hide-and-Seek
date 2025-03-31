@@ -19,7 +19,7 @@ with open(reward_log_path, "w") as f:
 
 def get_maze_file():
     # Check if a file name is passed via command-line
-    maze_file_name = sys.argv[1] if len(sys.argv) > 1 else "maze3.txt"
+    maze_file_name = sys.argv[1] if len(sys.argv) > 1 else "maze.txt"
 
     # Check if file exists
     if not os.path.exists(maze_file_name):
@@ -34,7 +34,7 @@ def game_loop():
     pygame.init()
 
     font = pygame.font.SysFont(None, 36)
-    cell_size = 20
+    cell_size = 10
 
     while True:  # Infinite round loop
         # Load maze
@@ -53,9 +53,17 @@ def game_loop():
 
         start_ticks = pygame.time.get_ticks()
         running = True
-
+        previous_tick = pygame.time.get_ticks()
         while running:
             screen.fill((0, 0, 0))
+            if(pygame.time.get_ticks() - previous_tick) > 1000:
+                for y, row in enumerate(maze):  # Iterate through rows
+                    for x, cell in enumerate(row):  # Iterate through columns in each row
+                        if cell == '0' or cell == '5':
+                            maze[y][x] = ' '
+                        elif ord(cell) > ord('0') and ord(cell) <= ord('9'):
+                            maze[y][x] = str(int(cell) - 1)  # Access the cell value
+                previous_tick = pygame.time.get_ticks()
             maze_object.draw_maze(screen, maze, cell_size)
 
             # Draw all agents
@@ -79,19 +87,52 @@ def game_loop():
                     sys.exit()
 
             # Step agents
-            for agent in seeker:
-                maze = agent.step(maze, screen, hider)
             for random_agent in hider:
                 maze = random_agent.step(maze, screen, seeker)
-
+            
             # Save q-tables
             for agent in seeker + hider:
                 agent.save_q_table()
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_LEFT]: 
+                for agent in seeker:
+                    agent.rotate_left()
+            if keys[pygame.K_RIGHT]: 
+                for agent in seeker:
+                    agent.rotate_right()
+            if keys[pygame.K_UP]:
+                for agent in seeker:
+                    agent.move_forward(maze, screen, hider)
+            if keys[pygame.K_DOWN]:
+                for agent in seeker:
+                    agent.open_door(maze)
+            if keys[pygame.K_SPACE]:
+                for agent in seeker:
+                    agent.close_door(maze)
+            for agent in seeker:
+                if agent.type == 'seeker':
+                # === Reward: Hider detected in seeker's vision ===
+                    look_x = agent.x + math.cos(math.radians(agent.angle)) * agent.lookahead_distance
+                    look_y = agent.y + math.sin(math.radians(agent.angle)) * agent.lookahead_distance
 
+                    for other in hider:
+                        if other.type != 'hider':
+                            continue
+                        hider_rect = pygame.Rect(
+                            other.x - other.radius,
+                            other.y - other.radius,
+                            other.radius * 2,
+                            other.radius * 2
+                        )
+                        if hider_rect.clipline((agent.x, agent.y), (look_x, look_y)):
+                            #reward += 1000
+                            if agent.view_comments == True:
+                                print(f"[{agent.id}] REWARD: Found a hider in vision! DESTROYED.")
+                            other.destroyed = True  # Flag the hider as destroyed
+                
             clock.tick(60)
-
             if seconds_left <= 0 or all(h.destroyed for h in hider):
-                print("⏰ Round ended.")
+                print("Round ended.")
                 # Save rewards
                 with open(reward_log_path, "a") as f:
                     for a in seeker:
