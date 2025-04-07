@@ -195,59 +195,91 @@ class QLearningAgent(Agent):
                         print(f"[{self.id}] Keeping distance from other agent in same room.")
 
 
-        
+        # === Vision-based penalty/reward using vision_arc ===
+        seen_types = set()
+        for ray_data in self.vision_arc.values():
+            for obj_type, _ in ray_data:
+                seen_types.add(obj_type)
         if self.type == 'hider':
-            # === Penalty: Seeker detected in hider's vision ===
-            look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
-            look_y = self.y + math.sin(math.radians(self.angle)) * self.lookahead_distance
-
-            for other in other_agents:
-                if other.type != 'seeker':
-                    continue
-                seeker_rect = pygame.Rect(
-                    other.x - other.radius,
-                    other.y - other.radius,
-                    other.radius * 2,
-                    other.radius * 2
-                )
-                if seeker_rect.clipline((self.x, self.y), (look_x, look_y)):
-                    reward -= 100
-                    if self.view_comments == True:
-                        print(f"[{self.id}] HEAVY PENALTY: Seeker in hider’s vision! Must escape!")
-                    
+            if 'seeker' in seen_types:
+                reward -= 500
+                if self.view_comments:
+                    print(f"[{self.id}] HEAVY PENALTY: Seeker in hider’s vision! Must escape!")
         elif self.type == 'seeker':
-            # === Reward: Hider detected in seeker's vision ===
-            look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
-            look_y = self.y + math.sin(math.radians(self.angle)) * self.lookahead_distance
+            if 'hider' in seen_types:
+                reward += 1000
+                if self.view_comments:
+                    print(f"[{self.id}] REWARD: Found a hider in vision! DESTROYED.")
+            
+                for other in other_agents:
+                    if other.type == 'hider' and self.will_collide_with(other, 0, 0):
+                        reward += 2000
+                        other.destroyed = True
+        # if self.type == 'hider':
+        #     # === Penalty: Seeker detected in hider's vision ===
+        #     look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
+        #     look_y = self.y + math.sin(math.radians(self.angle)) * self.lookahead_distance
 
-            for other in other_agents:
-                if other.type != 'hider':
-                    continue
-                hider_rect = pygame.Rect(
-                    other.x - other.radius,
-                    other.y - other.radius,
-                    other.radius * 2,
-                    other.radius * 2
-                )
-                if hider_rect.clipline((self.x, self.y), (look_x, look_y)):
-                    reward += 1000
-                    if self.view_comments == True:
-                        print(f"[{self.id}] REWARD: Found a hider in vision! DESTROYED.")
-                    other.destroyed = True  # Flag the hider as destroyed
+        #     for other in other_agents:
+        #         if other.type != 'seeker':
+        #             continue
+        #         seeker_rect = pygame.Rect(
+        #             other.x - other.radius,
+        #             other.y - other.radius,
+        #             other.radius * 2,
+        #             other.radius * 2
+        #         )
+        #         if seeker_rect.clipline((self.x, self.y), (look_x, look_y)):
+        #             reward -= 100
+        #             if self.view_comments == True:
+        #                 print(f"[{self.id}] HEAVY PENALTY: Seeker in hider’s vision! Must escape!")
+                    
+        # elif self.type == 'seeker':
+        #     # === Reward: Hider detected in seeker's vision ===
+        #     look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
+        #     look_y = self.y + math.sin(math.radians(self.angle)) * self.lookahead_distance
+
+        #     for other in other_agents:
+        #         if other.type != 'hider':
+        #             continue
+        #         hider_rect = pygame.Rect(
+        #             other.x - other.radius,
+        #             other.y - other.radius,
+        #             other.radius * 2,
+        #             other.radius * 2
+        #         )
+        #         if hider_rect.clipline((self.x, self.y), (look_x, look_y)):
+        #             reward += 1000
+        #             if self.view_comments == True:
+        #                 print(f"[{self.id}] REWARD: Found a hider in vision! DESTROYED.")
+        #             other.destroyed = True  # Flag the hider as destroyed
                     
 
         # Check if it hit a wall
-        look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
-        look_y = self.y + math.sin(math.radians(self.angle)) * self.lookahead_distance
-        for y, row in enumerate(maze):
-            for x, cell in enumerate(row):
-                if cell == 'w':
-                    rect = pygame.Rect(x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size)
-                    if rect.clipline((self.x, self.y), (look_x, look_y)):
-                        reward -= 10
-                        if self.view_comments == True:
+        # look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
+        # look_y = self.y + math.sin(math.radians(self.angle)) * self.lookahead_distance
+        # for y, row in enumerate(maze):
+        #     for x, cell in enumerate(row):
+        #         if cell == 'w':
+        #             rect = pygame.Rect(x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size)
+        #             if rect.clipline((self.x, self.y), (look_x, look_y)):
+        #                 reward -= 10
+        #                 if self.view_comments == True:
+        #                     print(f"[{self.id}] Penalty: hit wall.")
+        #                 break
+
+        for ray_data in self.vision_arc.values():
+            for obj_type, depth in ray_data:
+                if obj_type == 'wall':
+                    if depth < self.lookahead_distance:
+                        reward -= 50
+                        if self.view_comments:
                             print(f"[{self.id}] Penalty: hit wall.")
-                        break
+                    else:
+                        reward -= 20
+                        if self.view_comments:
+                            print(f"[{self.id}] Penalty: detected wall.")
+
 
         next_state = self.get_state()
         self.update_q_value(reward, next_state)

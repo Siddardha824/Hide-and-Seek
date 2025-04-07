@@ -87,7 +87,7 @@ def game_loop():
         clock = pygame.time.Clock()
 
         # testing
-        hider[0].view_comments = True
+        hider[1].view_comments = True
 
         start_ticks = pygame.time.get_ticks()
         running = True
@@ -185,8 +185,7 @@ def game_loop():
                 maze = random_agent.step(maze, combined_window, seeker, door_positions)
 
             # Control frame rate
-            #clock.tick(60)
-            clock.tick(240)
+            clock.tick(60)
 
             if seconds_left <= 0 or all(h.destroyed for h in hider):
                 print("⏰ Round ended.")
