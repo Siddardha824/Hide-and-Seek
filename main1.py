@@ -20,7 +20,7 @@ with open(reward_log_path, "w") as f:
 
 def get_maze_file():
     # Check if a file name is passed via command-line
-    maze_file_name = sys.argv[1] if len(sys.argv) > 1 else "maze.txt"
+    maze_file_name = sys.argv[1] if len(sys.argv) > 1 else "maze3.txt"
 
     # Check if file exists
     if not os.path.exists(maze_file_name):
@@ -28,10 +28,6 @@ def get_maze_file():
         sys.exit(1)
 
     return maze_file_name
-
-
-# Add after imports
-import pygame.display
 
 
 def draw_distance_visualizer(screen, agent1, agent2, max_distance=500):
@@ -59,54 +55,65 @@ def draw_distance_visualizer(screen, agent1, agent2, max_distance=500):
     screen.blit(line_surface, (0, 0))
 
 
+# Add after imports
+import pygame.display
+
+
+def create_distance_window():
+    distance_window = pygame.display.set_mode((300, 400), pygame.RESIZABLE)
+    pygame.display.set_caption("Distance Monitor")
+    return distance_window
+
+
 def game_loop():
     maze_file = get_maze_file()
-    ROUND_DURATION_SEC = 120  # <<< You can change this value
+    ROUND_DURATION_SEC = 60
     pygame.init()
 
     font = pygame.font.SysFont(None, 36)
-    cell_size = 10
+    cell_size = 20
+
+    # Create single window with space for both game and visualizer
+    maze, door_positions = maze_object.read_maze(maze_file)
+    width, height = len(maze[0]) * cell_size, len(maze) * cell_size
+
+    # Combined window (maze width + 300px for visualizer)
+    combined_window = pygame.display.set_mode((width + 300, height))
+    pygame.display.set_caption("Hide and Seek with Distance Monitor")
 
     while True:  # Infinite round loop
-        # Load maze
-        maze = maze_object.read_maze(maze_file)
-        width, height = len(maze[0]) * cell_size, len(maze) * cell_size
-        screen = pygame.display.set_mode(
-            (width + 300, height)
-        )  # Added 300px for visualizer
-        pygame.display.set_caption("Hide and Seek with Distance Monitor")
-        clock = pygame.time.Clock()
-
         # Create agents
         seeker, hider = maze_object.draw_agents(maze, cell_size)
+        clock = pygame.time.Clock()
 
         # testing
-        seeker[0].view_comments = True
+        hider[0].view_comments = True
 
         start_ticks = pygame.time.get_ticks()
         running = True
-        previous_tick = pygame.time.get_ticks()
-        while running:
-            screen.fill((0, 0, 0))
-            if (pygame.time.get_ticks() - previous_tick) > 1000:
-                for y, row in enumerate(maze):  # Iterate through rows
-                    for x, cell in enumerate(
-                        row
-                    ):  # Iterate through columns in each row
-                        if cell == "0" or cell == "5":
-                            maze[y][x] = " "
-                        elif ord(cell) > ord("0") and ord(cell) <= ord("9"):
-                            maze[y][x] = str(int(cell) - 1)  # Access the cell value
-                previous_tick = pygame.time.get_ticks()
-            maze_object.draw_maze(screen, maze, cell_size)
 
-            # Draw all agents
+        while running:
+            # Handle events first for better responsiveness
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+            # Calculate time
+            seconds_passed = (pygame.time.get_ticks() - start_ticks) // 1000
+            seconds_left = max(0, ROUND_DURATION_SEC - seconds_passed)
+
+            # Clear and draw everything
+            combined_window.fill((0, 0, 0))
+            maze_object.draw_maze(combined_window, maze, cell_size)
+
+            # Draw agents
             for agent in seeker + hider:
                 if not agent.destroyed:
-                    agent.draw(screen)
+                    agent.draw(combined_window)
 
             # Draw visualizer background
-            pygame.draw.rect(screen, (50, 50, 50), (width, 0, 300, height))
+            pygame.draw.rect(combined_window, (50, 50, 50), (width, 0, 300, height))
 
             # Draw distance bars
             all_agents = [a for a in seeker + hider if not a.destroyed]
@@ -121,12 +128,12 @@ def game_loop():
 
                     # Calculate bar length with exponential decay
                     max_bar_width = 280
-                    decay_factor = 20
+                    decay_factor = 20  # Faster decay
                     bar_width = max_bar_width * math.exp(-distance / decay_factor)
 
                     # Draw bar background
                     pygame.draw.rect(
-                        screen,
+                        combined_window,
                         (100, 100, 100),
                         (width + 10, y_pos, max_bar_width, bar_height),
                     )
@@ -140,7 +147,7 @@ def game_loop():
                         color = (255, 255, 0)  # Yellow
 
                     pygame.draw.rect(
-                        screen,
+                        combined_window,
                         color,
                         (width + 10, y_pos, int(bar_width), bar_height),
                     )
@@ -150,88 +157,63 @@ def game_loop():
                     text = pygame.font.SysFont(None, 24).render(
                         label, True, (255, 255, 255)
                     )
-                    screen.blit(text, (width + 15, y_pos + 8))
+                    combined_window.blit(text, (width + 15, y_pos + 8))
 
                     y_pos += bar_height + spacing
 
             # Draw connecting lines between agents
             for i in range(len(all_agents)):
                 for j in range(i + 1, len(all_agents)):
-                    draw_distance_visualizer(screen, all_agents[i], all_agents[j])
+                    draw_distance_visualizer(
+                        combined_window, all_agents[i], all_agents[j]
+                    )
 
-            # === Timer ===
-            seconds_passed = (pygame.time.get_ticks() - start_ticks) // 1000
-            seconds_left = max(0, ROUND_DURATION_SEC - seconds_passed)
+            # Draw timer and update display
             timer_text = font.render(
                 f"Time Left: {seconds_left}s", True, (255, 255, 255)
             )
             text_rect = timer_text.get_rect(center=(width // 2, 20))
-            screen.blit(timer_text, text_rect)
+            combined_window.blit(timer_text, text_rect)
 
+            # Single display update
             pygame.display.flip()
 
-            # Check for quit
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-
             # Step agents
-            for random_agent in hider:
-                maze = random_agent.step(maze, screen, seeker)
-
-            # Save q-tables
-            for agent in seeker + hider:
-                agent.save_q_table()
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_LEFT]:
-                for agent in seeker:
-                    agent.rotate_left()
-            if keys[pygame.K_RIGHT]:
-                for agent in seeker:
-                    agent.rotate_right()
-            if keys[pygame.K_UP]:
-                for agent in seeker:
-                    agent.move_forward(maze, screen, hider)
-            if keys[pygame.K_DOWN]:
-                for agent in seeker:
-                    agent.open_door(maze)
-            if keys[pygame.K_SPACE]:
-                for agent in seeker:
-                    agent.close_door(maze)
             for agent in seeker:
-                if agent.type == "seeker":
-                    # === Reward: Hider detected in seeker's vision ===
-                    look_x = (
-                        agent.x
-                        + math.cos(math.radians(agent.angle)) * agent.lookahead_distance
-                    )
-                    look_y = (
-                        agent.y
-                        + math.sin(math.radians(agent.angle)) * agent.lookahead_distance
-                    )
+                maze = agent.step(maze, combined_window, hider, door_positions)
+            for random_agent in hider:
+                maze = random_agent.step(maze, combined_window, seeker, door_positions)
 
-                    for other in hider:
-                        if other.type != "hider":
-                            continue
-                        hider_rect = pygame.Rect(
-                            other.x - other.radius,
-                            other.y - other.radius,
-                            other.radius * 2,
-                            other.radius * 2,
-                        )
-                        if hider_rect.clipline((agent.x, agent.y), (look_x, look_y)):
-                            # reward += 1000
-                            if agent.view_comments == True:
-                                print(
-                                    f"[{agent.id}] REWARD: Found a hider in vision! DESTROYED."
-                                )
-                            other.destroyed = True  # Flag the hider as destroyed
+            # Control frame rate
+            # clock.tick(60)
+            clock.tick(240)
 
-            clock.tick(60)
             if seconds_left <= 0 or all(h.destroyed for h in hider):
-                print("Round ended.")
-                # Save rewards
+                print("⏰ Round ended.")
+
+                # --- BEGIN ADDED CODE ---
+                # Save Q-tables for all agents
+                print("💾 Saving Q-tables...")
+                save_count = 0
+                for agent in seeker:
+                    try:
+                        agent.save_q_table()
+                        save_count += 1
+                    except Exception as e:
+                        print(f"Error saving Q-table for seeker {agent.id}: {e}")
+
+                for agent in hider:
+                    # Even if destroyed, save its last learned state
+                    try:
+                        agent.save_q_table()
+                        save_count += 1
+                    except Exception as e:
+                        print(f"Error saving Q-table for hider {agent.id}: {e}")
+                print(f"💾 Q-tables saved for {save_count} agents.")
+                # --- END ADDED CODE ---
+
+                # Save rewards (existing code)
+                print("📊 Logging rewards...")
                 with open(reward_log_path, "a") as f:
                     for a in seeker:
                         f.write(f"{a.id},{a.type},{a.total_reward}, - , - \n")
@@ -248,6 +230,8 @@ def game_loop():
                     f.write(
                         "--------------------------------------------------------------------\n"
                     )
+                print("📊 Rewards logged.")
+
                 break  # End this round and restart loop
 
 
