@@ -96,6 +96,8 @@ class QLearningAgent(Agent):
             maze = self.close_door(maze)
 
         # === Reward Calculation ===
+
+        #penalty for not exploring
         distance_from_start = math.hypot(self.x - self.initial_pos[0], self.y - self.initial_pos[1])
         if distance_from_start > 500:
             reward += 25
@@ -116,6 +118,8 @@ class QLearningAgent(Agent):
         #         print(f"[{self.id}] Reward: keeping distance from other agent.")
 
         # Convert agent's pixel position to cell value (like your wall check style)
+        
+        #rank hider and give hider rewards based on region
         my_region = None
         for y, row in enumerate(maze):
             for x, cell in enumerate(row):
@@ -124,19 +128,24 @@ class QLearningAgent(Agent):
                     my_region = maze[y][x]
                     if self.type == 'hider':
                         if my_region == '2':
+                            reward += 500
                             self.rank_point += 3
                         if my_region == '1':
                             self.rank_point += 2
+                            reward += 100
                         else:
                             self.rank_point += 1 #higher for who stays longest
                     break
             if my_region is not None:
                 break
 
+        #reward or penalize when 2 agents in same region
         for other in other_agents:
             other_region = None
             for y, row in enumerate(maze):
                 for x, cell in enumerate(row):
+                    if cell == 'o':
+                        print(f"'o' found at: ({x}, {y})")
                     rect = pygame.Rect(x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size)
                     if rect.collidepoint(other.x, other.y):
                         other_region = maze[y][x]
@@ -162,6 +171,7 @@ class QLearningAgent(Agent):
                         print(f"[{self.id}] Keeping distance from other agent in same room.")
 
 
+        
         if self.type == 'hider':
             # === Penalty: Seeker detected in hider's vision ===
             look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
