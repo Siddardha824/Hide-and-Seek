@@ -13,9 +13,11 @@ from q_learning import QLearningAgent
 class Maze:
     def read_maze(self,filename):
         try:
+            door_positions = []
             with open(filename, 'r') as f:
                 maze = [list(line.strip()) for line in f.readlines()]
                 maze = [['o' if cell == 'd' else cell for cell in row] for row in maze]
+                door_positions = [[(row,cell) if cell == 'o' else cell for cell in row] for row in maze]
 
                 # Ensure all rows are exactly 40 characters wide
                 max_width = max(len(row) for row in maze)  # Find max row width
@@ -26,13 +28,13 @@ class Maze:
                 if not maze or len(maze[0]) == 0:
                     raise ValueError("Maze file is empty or incorrectly formatted.")
                 
-                return maze
+                return maze, door_positions
         except FileNotFoundError:
             print("Maze file not found! Using a default 40x40 maze.")
-            return [["w"] * 40] + [["w"] + [" "] * 38 + ["w"] for _ in range(38)] + [["w"] * 40]
+            return [["w"] * 40] + [["w"] + ["1"] * 38 + ["w"] for _ in range(38)] + [["w"] * 40], []
         except ValueError as e:
             print(f"Error reading maze: {e}")
-            return [["w"] * 40 for _ in range(40)]  # Default fallback
+            return [["w"] * 40] + [["w"] + ["1"] * 38 + ["w"] for _ in range(38)] + [["w"] * 40], [] # Default fallback
 
 
     def draw_maze(self,screen, maze, cell_size):

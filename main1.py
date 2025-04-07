@@ -67,14 +67,14 @@ def create_distance_window():
 
 def game_loop():
     maze_file = get_maze_file()
-    ROUND_DURATION_SEC = 120
+    ROUND_DURATION_SEC = 60
     pygame.init()
 
     font = pygame.font.SysFont(None, 36)
     cell_size = 20
 
     # Create single window with space for both game and visualizer
-    maze = maze_object.read_maze(maze_file)
+    maze,door_positions = maze_object.read_maze(maze_file)
     width, height = len(maze[0]) * cell_size, len(maze) * cell_size
 
     # Combined window (maze width + 300px for visualizer)
@@ -87,7 +87,7 @@ def game_loop():
         clock = pygame.time.Clock()
 
         # testing
-        seeker[0].view_comments = True
+        hider[0].view_comments = True
 
         start_ticks = pygame.time.get_ticks()
         running = True
@@ -180,12 +180,13 @@ def game_loop():
 
             # Step agents
             for agent in seeker:
-                maze = agent.step(maze, combined_window, hider)
+                maze = agent.step(maze, combined_window, hider, door_positions)
             for random_agent in hider:
-                maze = random_agent.step(maze, combined_window, seeker)
+                maze = random_agent.step(maze, combined_window, seeker, door_positions)
 
             # Control frame rate
-            clock.tick(60)
+            #clock.tick(60)
+            clock.tick(240)
 
             if seconds_left <= 0 or all(h.destroyed for h in hider):
                 print("⏰ Round ended.")
