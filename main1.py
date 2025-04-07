@@ -74,7 +74,7 @@ def game_loop():
     cell_size = 20
 
     # Create single window with space for both game and visualizer
-    maze,door_positions = maze_object.read_maze(maze_file)
+    maze, door_positions = maze_object.read_maze(maze_file)
     width, height = len(maze[0]) * cell_size, len(maze) * cell_size
 
     # Combined window (maze width + 300px for visualizer)
@@ -87,7 +87,7 @@ def game_loop():
         clock = pygame.time.Clock()
 
         # testing
-        hider[1].view_comments = True
+        hider[0].view_comments = True
 
         start_ticks = pygame.time.get_ticks()
         running = True
@@ -185,11 +185,35 @@ def game_loop():
                 maze = random_agent.step(maze, combined_window, seeker, door_positions)
 
             # Control frame rate
-            clock.tick(60)
+            # clock.tick(60)
+            clock.tick(240)
 
             if seconds_left <= 0 or all(h.destroyed for h in hider):
                 print("⏰ Round ended.")
-                # Save rewards
+
+                # --- BEGIN ADDED CODE ---
+                # Save Q-tables for all agents
+                print("💾 Saving Q-tables...")
+                save_count = 0
+                for agent in seeker:
+                    try:
+                        agent.save_q_table()
+                        save_count += 1
+                    except Exception as e:
+                        print(f"Error saving Q-table for seeker {agent.id}: {e}")
+
+                for agent in hider:
+                    # Even if destroyed, save its last learned state
+                    try:
+                        agent.save_q_table()
+                        save_count += 1
+                    except Exception as e:
+                        print(f"Error saving Q-table for hider {agent.id}: {e}")
+                print(f"💾 Q-tables saved for {save_count} agents.")
+                # --- END ADDED CODE ---
+
+                # Save rewards (existing code)
+                print("📊 Logging rewards...")
                 with open(reward_log_path, "a") as f:
                     for a in seeker:
                         f.write(f"{a.id},{a.type},{a.total_reward}, - , - \n")
@@ -206,6 +230,8 @@ def game_loop():
                     f.write(
                         "--------------------------------------------------------------------\n"
                     )
+                print("📊 Rewards logged.")
+
                 break  # End this round and restart loop
 
 
