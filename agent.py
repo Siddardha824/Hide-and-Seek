@@ -105,7 +105,7 @@ class Agent:
         self.x += dx
         self.y += dy
         self.total_distance += math.hypot(self.x - prev_x, self.y - prev_y)
-        self.update_vision_arc(maze)  # Update vision arc after movement
+        self.update_vision_arc(maze,other_agents)  # Update vision arc after movement
 
     def open_door(self,maze):
         look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
@@ -147,7 +147,7 @@ class Agent:
     def rotate_right(self):
         self.angle = (self.angle + 30) % 360
 
-    def update_vision_arc(self, maze):
+    def update_vision_arc(self, maze, other_agents=[]):
         self.vision_arc = defaultdict(list)
         start_angle = math.radians(self.angle) - self.half_fov
 
@@ -158,25 +158,82 @@ class Agent:
 
                 col = int(target_x / self.cell_size)
                 row = int(target_y / self.cell_size)
-
+                obstacle = ""
+                depth_obs = depth
                 if 0 <= row < len(maze) and 0 <= col < len(maze[0]):
                     cell = maze[row][col]
-                    if cell == 'w':  # Wall
-                        self.vision_arc[str(ray+1)].append(("wall", depth))
-                        break
-                    elif cell == 'd':  # Closed door
-                        self.vision_arc[str(ray+1)].append(("closed door", depth))
-                        break
-                    elif cell == 'o':  # Open door
-                        try:
-                            if self.vision_arc[str(ray+1)][-1][0] != "open door":
-                                self.vision_arc[str(ray+1)].append(("open door", depth))
-                        except IndexError:
-                            self.vision_arc[str(ray+1)].append(("open door", depth))
-                    elif depth == self.max_depth - 1:
-                        self.vision_arc[str(ray+1)].append(("empty", depth))
-                        break
+                    
+                    if cell == 'w':
+                        if depth <= depth_obs:
+                            obstacle = "wall"
+                            depth_obs = depth
+                    elif cell == 'd':
+                        if depth <= depth_obs:
+                            obstacle = "closed door"
+                            depth_obs = depth
+                    elif cell == 'o':
+                        if not self.vision_arc[str(ray+1)] or self.vision_arc[str(ray+1)][-1][0] != "open door":
+                            if depth <= depth_obs:
+                                obstacle = "open door"
+                                depth_obs = depth
+
+                # Check if any agent is at this ray point
+                for agent in other_agents:
+                    if agent == self:
+                        continue
+                    if math.hypot(agent.x - target_x, agent.y - target_y) < agent.radius:
+                        if depth <= depth_obs:
+                            obstacle = agent.type
+                            depth_obs = depth
+
+                if obstacle != "":
+                    self.vision_arc[str(ray+1)].append((obstacle, depth_obs))
+
+                # If max depth reached without blocking object
+                if depth == self.max_depth - 1:
+                    self.vision_arc[str(ray+1)].append(("empty", depth))
 
             start_angle += self.step_angle
-        
+
+    def update_vision_arc(self, maze, other_agents=[]):
+        self.vision_arc = defaultdict(list)
+        start_angle = math.radians(self.angle) - self.half_fov
+
+        for ray in range(self.casted_rays):
+            nearest_type = "empty"
+            nearest_depth = self.max_depth
+
+            for depth in range(self.max_depth):
+                target_x = self.x + math.cos(start_angle) * depth
+                target_y = self.y + math.sin(start_angle) * depth
+
+                col = int(target_x / self.cell_size)
+                row = int(target_y / self.cell_size)
+
+                # Check maze-based objects
+                if 0 <= row < len(maze) and 0 <= col < len(maze[0]):
+                    cell = maze[row][col]
+
+                    if cell == 'w' and depth < nearest_depth:
+                        nearest_type = "wall"
+                        nearest_depth = depth
+                    elif cell == 'd' and depth < nearest_depth:
+                        nearest_type = "closed door"
+                        nearest_depth = depth
+                    elif cell == 'o' and depth < nearest_depth:
+                        nearest_type = "open door"
+                        nearest_depth = depth
+
+                # Check for agents
+                for agent in other_agents:
+                    if agent == self:
+                        continue
+                    if math.hypot(agent.x - target_x, agent.y - target_y) < agent.radius:
+                        if depth < nearest_depth:
+                            nearest_type = agent.type
+                            nearest_depth = depth
+
+            self.vision_arc[str(ray + 1)].append((nearest_type, nearest_depth))
+            start_angle += self.step_angle
+
         print(self.vision_arc)
