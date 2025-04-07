@@ -78,7 +78,7 @@ class QLearningAgent(Agent):
         new_q = (1 - self.alpha) * old_q + self.alpha * (reward + self.gamma * next_max)
         self.q_table[self.prev_state][self.prev_action] = new_q
 
-    def step(self, maze, screen, other_agents):
+    def step(self, maze, screen, other_agents, door_positions):
         action = self.get_action()
         reward = 0
 
@@ -103,8 +103,16 @@ class QLearningAgent(Agent):
             reward += 25
             if self.view_comments == True:
                 print(f"[{self.id}] Reward: explored area well.")
+        elif distance_from_start > 1000:
+            reward += 50
+            if self.view_comments == True:
+                print(f"[{self.id}] Reward: explored area well.")
+        elif distance_from_start > 2000:
+            reward += 60
+            if self.view_comments == True:
+                print(f"[{self.id}] Reward: explored area well.")
         elif distance_from_start < 500:
-            reward -= 15
+            reward -= 150
             if self.view_comments == True:
                 print(f"[{self.id}] Penalty: not exploring much.")
 
@@ -129,12 +137,25 @@ class QLearningAgent(Agent):
                     if self.type == 'hider':
                         if my_region == '2':
                             reward += 500
+                            #if they close doors in this region then higher reward else penalty
+                            if action == 'close':
+                                reward += 500
+                            elif action == 'open':
+                                reward -= 500
                             self.rank_point += 3
-                        if my_region == '1':
+                        if my_region == '3':
                             self.rank_point += 2
                             reward += 100
+                            #if they close doors in this region then higher reward else penalty
+                            if action == 'close':
+                                reward += 300
+                            elif action == 'open':
+                                reward -= 300
                         else:
                             self.rank_point += 1 #higher for who stays longest
+                    elif self.type == 'seeker':
+                        if action == 'open':
+                                reward += 500 #seeker opening doors lead to lowering the safety of hider and helping it catch them
                     break
             if my_region is not None:
                 break
@@ -144,8 +165,6 @@ class QLearningAgent(Agent):
             other_region = None
             for y, row in enumerate(maze):
                 for x, cell in enumerate(row):
-                    if cell == 'o':
-                        print(f"'o' found at: ({x}, {y})")
                     rect = pygame.Rect(x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size)
                     if rect.collidepoint(other.x, other.y):
                         other_region = maze[y][x]
@@ -155,6 +174,11 @@ class QLearningAgent(Agent):
 
             if my_region == other_region and my_region not in ['w', 'o', 'h', 's']:
                 dist_to_other = math.hypot(self.x - other.x, self.y - other.y)
+                
+                #reward hiders hiding together , since it leads to more door close hence safer
+                if self.type == 'hider' and other.type == 'hider'and (my_region == '2' or my_region == '3'):
+                    reward += 500
+
                 if dist_to_other < 200:
                     if self.type == 'hider' and other.type == 'seeker':
                         reward -= 10
