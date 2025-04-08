@@ -112,7 +112,7 @@ class Agent:
         self.x += dx
         self.y += dy
         self.total_distance += math.hypot(self.x - prev_x, self.y - prev_y)
-        self.update_vision_and_trail_arc(maze)  # Update vision arc after movement
+        self.update_vision_and_trail_arc(maze, other_agents)  # Update vision arc after movement
 
     def open_door(self,maze):
         look_x = self.x + math.cos(math.radians(self.angle)) * self.lookahead_distance
@@ -154,45 +154,77 @@ class Agent:
     def rotate_right(self):
         self.angle = (self.angle + 30) % 360
 
-    def update_vision_and_trail_arc(self, maze):
+    def update_vision_and_trail_arc(self, maze, other_agents):
         self.vision_arc = defaultdict(list)
         self.trail_arc = defaultdict(list)
         start_angle = math.radians(self.angle) - self.half_fov
+        ray_start_offset = 0.1  # Small offset to start ray casting slightly away from self center
 
         for ray in range(self.casted_rays):
-            for depth in range(self.max_depth):
-                target_x = self.x + math.cos(start_angle) * depth
-                target_y = self.y + math.sin(start_angle) * depth
+            current_angle = start_angle + ray * self.step_angle
+            closest_hit_depth = float("inf")
+            closest_hit_info = None
 
+            for depth_step in range(1, self.max_depth):
+                depth = depth_step * 1.0  # Use float depth
+                if depth >= closest_hit_depth:
+                    break
+
+                target_x = self.x + math.cos(current_angle) * (depth + ray_start_offset)
+                target_y = self.y + math.sin(current_angle) * (depth + ray_start_offset)
+
+                # 1. Check for Agent Collision
+                agent_hit_this_step = False
+                for agent in other_agents:
+                    if agent is self or getattr(agent, "destroyed", False):
+                        continue
+
+                    dist_sq = (target_x - agent.x) ** 2 + (target_y - agent.y) ** 2
+                    if dist_sq < (agent.radius**2):
+                        if depth < closest_hit_depth:
+                            closest_hit_depth = depth
+                            closest_hit_info = (
+                                "agent",
+                                round(depth),
+                                getattr(agent, "type", "unknown"),
+                            )
+                        agent_hit_this_step = True
+                        break
+
+                if agent_hit_this_step:
+                    break
+
+                # 2. Check for Maze Collision (Walls/Doors)
                 col = int(target_x / self.cell_size)
                 row = int(target_y / self.cell_size)
 
-                if 0 <= row < len(maze) and 0 <= col < len(maze[0]):
-                    cell = maze[row][col]
-                    if cell == 'w':  # Wall
-                        self.vision_arc[str(ray+1)].append(("wall", depth))
-                        break
-                    elif cell == 'd':  # Closed door
-                        self.vision_arc[str(ray+1)].append(("closed door", depth))
-                        break
-                    elif cell == 's':  # Seeker
-                        self.vision_arc[str(ray+1)].append(("seeker", depth))
-                        break
-                    elif cell == 'h':
-                        self.vision_arc[str(ray+1)].append(("hider", depth))
-                        break
-                    elif cell == 'o':  # Open door
-                        try:
-                            if self.vision_arc[str(ray+1)][-1][0] != "open door":
-                                self.vision_arc[str(ray+1)].append(("open door", depth))
-                        except IndexError:
-                            self.vision_arc[str(ray+1)].append(("open door", depth))
-                    elif depth == self.max_depth - 1:
-                        self.vision_arc[str(ray+1)].append(("empty", depth))
-                        break
-                    if cell >= '0' and cell <= '4' and self.type == 'seeker':
-                        self.trail_arc[str(ray+1)].append((cell, depth))
-                    if cell >= '5' and cell <= '9' and self.type == 'hider':
-                        self.trail_arc[str(ray+1)].append((cell, depth))
+                if not (0 <= row < len(maze) and 0 <= col < len(maze[0])):
+                    if depth < closest_hit_depth:
+                        closest_hit_depth = depth
+                        closest_hit_info = ("out_of_bounds", round(depth))
+                    break
+
+                cell = maze[row][col]
+                if cell == "w" or cell == "d":
+                    feature_type = "wall" if cell == "w" else "closed_door"
+                    if depth < closest_hit_depth:
+                        closest_hit_depth = depth
+                        closest_hit_info = (feature_type, round(depth))
+                    break
+                elif cell == "o":
+                    if depth < closest_hit_depth:
+                        pass
+
+                # 3. Update Trail Arc
+                if cell >= '0' and cell <= '4' and self.type == 'seeker':
+                    self.trail_arc[str(ray + 1)].append((cell, depth))
+                if cell >= '5' and cell <= '9' and self.type == 'hider':
+                    self.trail_arc[str(ray + 1)].append((cell, depth))
+
+            # End of casting for one ray. Add the closest hit info.
+            if closest_hit_info:
+                self.vision_arc[str(ray + 1)].append(closest_hit_info)
+            else:
+                self.vision_arc[str(ray + 1)].append(("empty", self.max_depth))
+
             start_angle += self.step_angle
-        

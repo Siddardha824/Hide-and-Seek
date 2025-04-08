@@ -73,25 +73,26 @@ def game_loop():
     font = pygame.font.SysFont(None, 36)
     cell_size = 20
 
-    # Create single window with space for both game and visualizer
-    maze, door_positions = maze_object.read_maze(maze_file)
-    width, height = len(maze[0]) * cell_size, len(maze) * cell_size
-
-    # Combined window (maze width + 300px for visualizer)
-    combined_window = pygame.display.set_mode((width + 300, height))
-    pygame.display.set_caption("Hide and Seek with Distance Monitor")
-
     while True:  # Infinite round loop
+
+        # Create single window with space for both game and visualizer
+        maze, door_positions = maze_object.read_maze(maze_file)
+        width, height = len(maze[0]) * cell_size, len(maze) * cell_size
+
+        # Combined window (maze width + 300px for visualizer)
+        combined_window = pygame.display.set_mode((width + 300, height))
+        pygame.display.set_caption("Hide and Seek with Distance Monitor")
+
         # Create agents
         seeker, hider = maze_object.draw_agents(maze, cell_size)
         clock = pygame.time.Clock()
 
         # testing
-        hider[0].view_comments = True
+        seeker[0].view_comments = True
 
         start_ticks = pygame.time.get_ticks()
         running = True
-
+        previous_tick = pygame.time.get_ticks()
         while running:
             # Handle events first for better responsiveness
             for event in pygame.event.get():
@@ -105,6 +106,14 @@ def game_loop():
 
             # Clear and draw everything
             combined_window.fill((0, 0, 0))
+            if(pygame.time.get_ticks() - previous_tick) > 300:
+                for y, row in enumerate(maze):  # Iterate through rows
+                    for x, cell in enumerate(row):  # Iterate through columns in each row
+                        if cell == '0' or cell == '5':
+                            maze[y][x] = ' '
+                        elif ord(cell) > ord('0') and ord(cell) <= ord('9'):
+                            maze[y][x] = str(int(cell) - 1)  # Access the cell value
+                previous_tick = pygame.time.get_ticks()
             maze_object.draw_maze(combined_window, maze, cell_size)
 
             # Draw agents
@@ -189,11 +198,11 @@ def game_loop():
             clock.tick(240)
 
             if seconds_left <= 0 or all(h.destroyed for h in hider):
-                print("⏰ Round ended.")
+                print(" Round ended.")
 
                 # --- BEGIN ADDED CODE ---
                 # Save Q-tables for all agents
-                print("💾 Saving Q-tables...")
+                print(" Saving Q-tables...")
                 save_count = 0
                 for agent in seeker:
                     try:
@@ -209,11 +218,11 @@ def game_loop():
                         save_count += 1
                     except Exception as e:
                         print(f"Error saving Q-table for hider {agent.id}: {e}")
-                print(f"💾 Q-tables saved for {save_count} agents.")
+                print(f" Q-tables saved for {save_count} agents.")
                 # --- END ADDED CODE ---
 
                 # Save rewards (existing code)
-                print("📊 Logging rewards...")
+                print(" Logging rewards...")
                 with open(reward_log_path, "a") as f:
                     for a in seeker:
                         f.write(f"{a.id},{a.type},{a.total_reward}, - , - \n")
@@ -230,7 +239,7 @@ def game_loop():
                     f.write(
                         "--------------------------------------------------------------------\n"
                     )
-                print("📊 Rewards logged.")
+                print(" Rewards logged.")
 
                 break  # End this round and restart loop
 

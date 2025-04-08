@@ -35,7 +35,7 @@ class QLearningAgent(Agent):
             200  # Max reward/penalty magnitude for seeing opponent
         )
         self.VISION_PROXIMITY_DECAY_RATE = (
-            self.cell_size * 2.5
+            self.cell_size * 3
         )  # Controls how fast effect drops with distance
         self.VISION_CATCH_THRESHOLD = (
             self.cell_size * 1.5
@@ -76,8 +76,8 @@ class QLearningAgent(Agent):
                         continue
                     try:
                         state_str, actions_str = line.split("|")
-                        # Convert state components back to floats/numbers
-                        state_components = list(map(float, state_str.split(",")))
+                        # Convert state components back to integers/floats
+                        state_components = list(map(int, state_str.split(",")))
                         state = tuple(state_components)
 
                         action_pairs = actions_str.split(",")
@@ -105,10 +105,57 @@ class QLearningAgent(Agent):
         return q_table
 
     def get_state(self):
-        """Gets the current state representation (rounded position and angle)."""
-        # Consider rounding to larger increments (e.g., // 5 * 5) or using grid coords
-        # to reduce state space size if performance is an issue.
-        return (round(self.x), round(self.y), round(self.angle))
+        """Gets the current state representation with additional parameters for vision and trail arc."""
+        # Base state: rounded position and angle
+        base_state = (round(self.x), round(self.y), round(self.angle))
+
+        # Vision Parameter
+        left_half_min_dist = 9  # Default to max distance (no enemy in left half)
+        right_half_min_dist = 9  # Default to max distance (no enemy in right half)
+        enemy_detected = False
+
+        for ray_idx, items in self.vision_arc.items():
+            ray_idx = int(ray_idx)  # Convert ray index to integer
+            for item_tuple in items:
+                if len(item_tuple) >= 3 and item_tuple[0] == "agent":
+                    detected_agent_type = item_tuple[2]
+                    if (self.type == "seeker" and detected_agent_type == "hider") or (
+                        self.type == "hider" and detected_agent_type == "seeker"
+                    ):
+                        enemy_detected = True
+                        item_depth = item_tuple[1]
+                        # Determine if the ray is in the left or right half of the vision
+                        if ray_idx <= self.casted_rays // 2:  # Left half
+                            left_half_min_dist = min(left_half_min_dist, int(item_depth // (self.max_depth / 9)))
+                        else:  # Right half
+                            right_half_min_dist = min(right_half_min_dist, int(item_depth // (self.max_depth / 9)))
+
+        # If no enemy detected, set vision parameter to 99
+        vision_param = 99 if not enemy_detected else left_half_min_dist * 10 + right_half_min_dist
+
+        # Trail Arc Parameter
+        left_half_trail_min_dist = 9  # Default to max distance (no trail in left half)
+        right_half_trail_min_dist = 9  # Default to max distance (no trail in right half)
+        trail_detected = False
+
+        for ray_idx, trail_items in self.trail_arc.items():
+            ray_idx = int(ray_idx)  # Convert ray index to integer
+            for trail_type, trail_distance in trail_items:
+                if (self.type == "hider" and trail_type >= "5" and trail_type <= "9") or (
+                    self.type == "seeker" and trail_type >= "0" and trail_type <= "4"
+                ):
+                    trail_detected = True
+                    # Determine if the ray is in the left or right half of the trail arc
+                    if ray_idx <= self.casted_rays // 2:  # Left half
+                        left_half_trail_min_dist = min(left_half_trail_min_dist, int(trail_distance // (self.max_depth / 9)))
+                    else:  # Right half
+                        right_half_trail_min_dist = min(right_half_trail_min_dist, int(trail_distance // (self.max_depth / 9)))
+
+        # If no trail detected, set trail parameter to 99
+        trail_param = 99 if not trail_detected else left_half_trail_min_dist * 10 + right_half_trail_min_dist
+
+        # Combine all parameters into the state
+        return base_state + (vision_param, trail_param)
 
     def get_action(self):
         """Chooses an action using epsilon-greedy strategy."""
@@ -194,6 +241,8 @@ class QLearningAgent(Agent):
     # --- Main Step Function ---
     def step(self, maze, screen, other_agents, door_positions):
         """Performs one step of action, reward calculation, and learning."""
+        if self.destroyed:
+            return maze
         # 1. Choose action based on current state
         action = self.get_action()
         current_reward = 0.0  # Accumulate rewards for this step
@@ -211,18 +260,19 @@ class QLearningAgent(Agent):
             maze = self.close_door(maze)  # Returns updated maze
 
         # 3. Update Vision Arc based on NEW state
-        # Assumes Agent.py has the updated method that detects agents
+        # Assumes Agent.py has the updated method that detects agentss agents
         try:
             active_others = [
                 a
                 for a in other_agents
                 if not getattr(a, "destroyed", False) and a is not self
             ]
-            self.update_vision_arc(maze, active_others)
+            self.update_vision_and_trail_arc(maze, active_others)
         except (AttributeError, TypeError) as e:
             print(
-                f"CRITICAL WARNING: Agent {self.id} 'update_vision_arc' failed or missing/wrong arguments! Vision rewards will not work. Error: {e}"
-            )
+                f"CRITICAL WARNING: Agent {self.id} 'update_vision_and_trail_arc' failed or missing/wrong arguments! Vision rewards will not work. Error# Ensure vision_arc exists even if update fails, to prevent later errors: {e}"
+       # Ensure vision_arc exists even if update fails, to prevent later errors
+     )
             # Ensure vision_arc exists even if update fails, to prevent later errors
             if not hasattr(self, "vision_arc"):
                 self.vision_arc = defaultdict(list)
@@ -253,21 +303,21 @@ class QLearningAgent(Agent):
         region_reward = 0
         if self.type == "hider":
             base_region_reward = 300
-            if my_region == "2":
+            if my_region == "b":
                 region_reward += base_region_reward + 300
                 if action == "close":
                     region_reward += 500
                 elif action == "open":
                     region_reward -= 500
                 self.rank_point += 3
-            elif my_region == "3":
+            elif my_region == "c":
                 region_reward += base_region_reward
                 if action == "close":
                     region_reward += 300
                 elif action == "open":
                     region_reward -= 300
                 self.rank_point += 2
-            elif my_region == "1":  # Add reward for region 1
+            elif my_region == "a":  # Add reward for region 1
                 if action == "open":
                     region_reward += 200  # Reward for opening doors in region 1
                 self.rank_point += 1
@@ -294,7 +344,7 @@ class QLearningAgent(Agent):
                 dist_to_other = math.hypot(self.x - other.x, self.y - other.y)
                 if self.type == "hider" and other.type == "hider":
                     # Reward hiders sticking together in safe rooms?
-                    if my_region in ["2", "3"]:
+                    if my_region in ["b", "c"]:
                         interaction_reward += 500  # Make sure this aligns with goals
                 elif self.type == "hider" and other.type == "seeker":
                     if dist_to_other < 200:
@@ -308,6 +358,29 @@ class QLearningAgent(Agent):
                         interaction_reward += 10  # Smaller reward further away
         current_reward += interaction_reward
         # Add view_comments logic if needed
+
+        # --- Trail Arc Reward/Penalty ---
+        trail_reward = 0
+        for ray, trail_items in self.trail_arc.items():
+            for item in trail_items:
+                trail_type, trail_distance = item
+                if self.type == "hider" and trail_type >= "5" and trail_type <= "9":
+                    # Hider gets a penalty if its trail arc contains a seeker's trail
+                    trail_penalty = 5000 / (trail_distance + 1)  # Inverse proportional to distance
+                    trail_reward -= trail_penalty
+                    if self.view_comments:
+                        print(
+                            f"[{self.id}] Trail Penalty: Hider detected seeker trail at dist {trail_distance:.1f}. Penalty= -{trail_penalty:.1f}"
+                        )
+                elif self.type == "seeker" and trail_type >= "0" and trail_type <= "4":
+                    # Seeker gets a reward if its trail arc contains a hider's trail
+                    trail_bonus = 5000 / (trail_distance + 1)  # Inverse proportional to distance
+                    trail_reward += trail_bonus
+                    if self.view_comments:
+                        print(
+                            f"[{self.id}] Trail Reward: Seeker detected hider trail at dist {trail_distance:.1f}. Reward= +{trail_bonus:.1f}"
+                        )
+        current_reward += trail_reward
 
         # --- Vision Arc Based Opponent Detection Reward/Penalty/Catch ---
         opponent_type = "hider" if self.type == "seeker" else "seeker"
@@ -353,7 +426,7 @@ class QLearningAgent(Agent):
                             vision_reward += self.CATCH_BONUS  # Add catch bonus
                             if self.view_comments:
                                 print(
-                                    f"💥 [{self.id}] Caught hider {closest_hider_obj.id}! (Actual dist {math.sqrt(min_actual_dist_sq):.1f}) Bonus= +{self.CATCH_BONUS}"
+                                    f" [{self.id}] Caught hider {closest_hider_obj.id}! (Actual dist {math.sqrt(min_actual_dist_sq):.1f}) Bonus= +{self.CATCH_BONUS}"
                                 )
 
             elif self.type == "hider":
@@ -373,10 +446,11 @@ class QLearningAgent(Agent):
         for ray_idx, items in self.vision_arc.items():
             for item_tuple in items:
                 # Check structure before unpacking
-                if len(item_tuple) >= 2:
-                    item_type = item_tuple[0]
+      
+                # Check structure before unpacking          if len(item_tuple)      
+                # Check structure before unpacking          if len(item_tuple) >= 2:item_tuple[0]
                     item_depth = item_tuple[1]
-                    if item_type in ["wall", "closed_door"]:
+                    if item_tuple in ["wall", "closed_door"]:
                         min_wall_dist = min(min_wall_dist, item_depth)
                         # Check if obstacle is very close
                         if item_depth < self.move_step * 1.5:
