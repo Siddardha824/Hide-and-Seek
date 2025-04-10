@@ -186,7 +186,7 @@ def game_loop():
 
             # Control frame rate
             # clock.tick(60)
-            clock.tick(240)
+            clock.tick(60)
 
             if seconds_left <= 0 or all(h.destroyed for h in hider):
                 print("⏰ Round ended.")

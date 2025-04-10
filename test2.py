@@ -11,7 +11,7 @@ WIDTH = GRID_SIZE * CELL_SIZE
 HEIGHT = GRID_SIZE * CELL_SIZE
 SCREEN_SIZE = (WIDTH, HEIGHT)
 
-# Colors
+# Colorsss
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREEN = (0, 200, 0)  # Empty cell floor
@@ -35,7 +35,7 @@ ENCLOSEDNESS_FACTOR = 10.0  # Multiplier for enclosedness reward
 # Simulation Parameters
 NUM_EPISODES = 5000
 MAX_STEPS_PER_EPISODE = 100
-FPS = 5000  # Control visualization speed (higher means faster simulation)
+FPS = 50000  # Control visualization speed (higher means faster simulation)
 
 
 # --- Environment Class ---
@@ -47,7 +47,7 @@ class GridEnvironment:
         self.enclosed_area_coords = set()
         self._place_walls_and_enclosure()
 
-    def _place_walls_and_enclosure(self, num_random_walls=1):
+    def _place_walls_and_enclosure(self, num_random_walls=10):
         # 1. Create an obvious enclosed area (e.g., bottom right corner)
         enclosure_start_row, enclosure_start_col = 6, 6
         enclosure_end_row, enclosure_end_col = 8, 8
