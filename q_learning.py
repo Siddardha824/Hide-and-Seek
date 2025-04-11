@@ -35,7 +35,7 @@ class QLearningAgent(Agent):
             200  # Max reward/penalty magnitude for seeing opponent
         )
         self.VISION_PROXIMITY_DECAY_RATE = (
-            self.cell_size * 3.5
+            self.cell_size * 2.5
         )  # Controls how fast effect drops with distance
         self.VISION_CATCH_THRESHOLD = (
             self.cell_size * 1.5
@@ -110,7 +110,7 @@ class QLearningAgent(Agent):
         # to reduce state space size if performance is an issue.
         return (round(self.x), round(self.y), round(self.angle))
 
-    def get_action(self, maze=None):
+    def get_action(self):
         """Chooses an action using epsilon-greedy strategy."""
         state = self.get_state()
         actions = ["move", "left", "right", "open", "close"]
@@ -121,29 +121,25 @@ class QLearningAgent(Agent):
             if self.view_comments:
                 print(f"[{self.id}] New state encountered: {state}")
 
-        # Get current region (door or not)
-        current_region = self.get_current_region(maze) if maze is not None else None
-
-        # Remove door actions if not at a door location
-        if current_region not in ["d", "o"]:  # 'd' for door, 'o' for open door
-            actions = [a for a in actions if a not in ["open", "close"]]
-
         # Epsilon-greedy selection
         if random.random() < self.epsilon:
             action = random.choice(actions)  # Explore
             if self.view_comments:
                 print(f"[{self.id}] Exploring: chose {action}")
         else:
-            # Exploit: Choose best known action from remaining options
-            q_values = {a: q for a, q in self.q_table[state].items() if a in actions}
+            # Exploit: Choose best known action
+            q_values = self.q_table[state]
             if not q_values:  # Should not happen if initialized, but safety check
-                action = random.choice(actions)
+                max_q = 0.0
+                best_actions = actions
             else:
                 max_q = max(q_values.values())
+                # Handle potential floating point inaccuracies when finding best actions
                 best_actions = [a for a, q in q_values.items() if abs(q - max_q) < 1e-6]
-                action = random.choice(best_actions)  # Random selection among best
 
+            action = random.choice(best_actions)  # Choose randomly among best actions
             if self.view_comments:
+                # Format the dictionary items into a string first
                 q_str = ", ".join(f"{a}:{q:.1f}" for a, q in q_values.items())
                 print(
                     f"[{self.id}] Exploiting: Qs={{{q_str}}}, chose {action} (maxQ {max_q:.1f})"
@@ -199,8 +195,8 @@ class QLearningAgent(Agent):
     def step(self, maze, screen, other_agents, door_positions):
         """Performs one step of action, reward calculation, and learning."""
         # 1. Choose action based on current state
-        action = self.get_action(maze)  # Pass maze here
-        current_reward = 0.0
+        action = self.get_action()
+        current_reward = 0.0  # Accumulate rewards for this step
 
         # 2. Perform Action in environment
         if action == "move":
@@ -257,21 +253,21 @@ class QLearningAgent(Agent):
         region_reward = 0
         if self.type == "hider":
             base_region_reward = 300
-            if my_region == "b":
+            if my_region == "2":
                 region_reward += base_region_reward + 300
                 if action == "close":
                     region_reward += 500
                 elif action == "open":
                     region_reward -= 500
                 self.rank_point += 3
-            elif my_region == "c":
+            elif my_region == "3":
                 region_reward += base_region_reward
                 if action == "close":
                     region_reward += 300
                 elif action == "open":
                     region_reward -= 300
                 self.rank_point += 2
-            elif my_region == "a":  # Add reward for region 1
+            elif my_region == "1":  # Add reward for region 1
                 if action == "open":
                     region_reward += 200  # Reward for opening doors in region 1
                 self.rank_point += 1
@@ -298,18 +294,18 @@ class QLearningAgent(Agent):
                 dist_to_other = math.hypot(self.x - other.x, self.y - other.y)
                 if self.type == "hider" and other.type == "hider":
                     # Reward hiders sticking together in safe rooms?
-                    if my_region in ["b", "c"]:
+                    if my_region in ["2", "3"]:
                         interaction_reward += 500  # Make sure this aligns with goals
                 elif self.type == "hider" and other.type == "seeker":
                     if dist_to_other < 200:
                         interaction_reward -= 100  # Penalty increases closer
                     elif dist_to_other < 500:
-                        interaction_reward -= 50  # Smaller penalty further away
+                        interaction_reward -= 20  # Smaller penalty further away
                 elif self.type == "seeker" and other.type == "hider":
                     if dist_to_other < 200:
-                        interaction_reward += 200  # Reward increases closer
+                        interaction_reward += 50  # Reward increases closer
                     elif dist_to_other < 500:
-                        interaction_reward += 100  # Smaller reward further away
+                        interaction_reward += 10  # Smaller reward further away
         current_reward += interaction_reward
         # Add view_comments logic if needed
 
